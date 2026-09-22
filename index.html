@@ -285,7 +285,13 @@
     DEBUG_MODE: false
   };
 
-  const REQUEST_TIMEOUT_MS = 12000;
+  // Backend LockService can wait up to ~10s for the lock, plus real
+  // execution time (spreadsheet open + read/write, which can be slow on
+  // an Apps Script cold start). The client timeout must comfortably
+  // exceed the server's own worst-case wait, or a slow-but-successful
+  // request gets aborted client-side and the operator never sees the
+  // real "already_used" / "verified" result.
+  const REQUEST_TIMEOUT_MS = 25000;
   const RESULT_DISPLAY_MS = 2200;
   const DUPLICATE_COOLDOWN_MS = 1500;
   const QR_BOX_SIZE = 260;
@@ -305,6 +311,7 @@
   let chosenCameraId = null;       // resolved once, reused on restarts
   let permissionGranted = false;
   let transientRetryCount = 0;
+  let cameraPaused = false;        // true while the feed is frozen during a request
 
   const stats = { total: 0, verified: 0, used: 0, invalid: 0, errors: 0 };
 
@@ -695,6 +702,7 @@
   function submitScan(qrToken) {
     processing = true;
     el.processingBadge.classList.add('show');
+    pauseCameraFeed();
 
     const controller = new AbortController();
     const timeoutId = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
@@ -735,7 +743,39 @@
         clearTimeout(timeoutId);
         processing = false; // always reset, even on exception
         el.processingBadge.classList.remove('show');
+        // Camera resumes once the result overlay finishes (see showResult),
+        // or immediately here if no result overlay was shown at all.
+        if (!resultShowing) resumeCameraFeed();
       });
+  }
+
+  // =====================================================================
+  // PAUSE / RESUME CAMERA FEED
+  // Freezes the live preview and stops scan decoding while a request is
+  // in flight (or a result is on screen), without tearing down and
+  // recreating the camera stream — that stays fast and avoids flicker.
+  // =====================================================================
+  function pauseCameraFeed() {
+    if (!html5QrCode || !cameraRunning || cameraPaused) return;
+    try {
+      html5QrCode.pause(true); // true = also freeze the visible video frame
+      cameraPaused = true;
+    } catch (e) {
+      // If pause isn't available/valid in the current state, just let the
+      // existing `processing` / `resultShowing` guards keep ignoring scans.
+    }
+  }
+
+  function resumeCameraFeed() {
+    if (!html5QrCode || !cameraPaused) return;
+    try {
+      html5QrCode.resume();
+    } catch (e) {
+      // Ignore — periodic self-check / visibility handlers will recover
+      // the camera if it actually died rather than just being paused.
+    } finally {
+      cameraPaused = false;
+    }
   }
 
   function handleResult(data) {
@@ -804,8 +844,9 @@
     setTimeout(function () {
       el.overlay.classList.remove('show');
       resultShowing = false;
-      // Camera stream is never stopped during result display, so
-      // scanning resumes automatically without recreating anything.
+      // Camera was paused (not torn down) for the request + result
+      // display, so resuming is instant and doesn't recreate anything.
+      resumeCameraFeed();
     }, RESULT_DISPLAY_MS);
   }
 
@@ -822,6 +863,7 @@
   function recoverCameraIfNeeded() {
     if (!permissionGranted) return; // don't auto-prompt before user gesture
     if (!html5QrCode) return;
+    if (cameraPaused) return; // intentionally frozen mid-request, not dead
     if (cameraRunning || starting) return;
     if (chosenCameraId) startWithDeviceId(chosenCameraId);
     else startWithFacingMode();
@@ -835,7 +877,7 @@
   // Periodic self-check: if the camera silently died, restart it — reuses
   // the single html5QrCode instance, never creates a new one.
   setInterval(function () {
-    if (permissionGranted && html5QrCode && !cameraRunning && !starting && !processing) {
+    if (permissionGranted && html5QrCode && !cameraRunning && !starting && !processing && !cameraPaused) {
       recoverCameraIfNeeded();
     }
   }, 5000);
