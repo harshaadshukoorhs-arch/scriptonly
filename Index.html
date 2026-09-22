@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Onam 2026 Coupon Scanner</title>
+<style>
+  :root {
+    --deep-green: #0b3d2e;
+    --green: #145c3f;
+    --gold: #c9a227;
+    --gold-soft: #e7cf7a;
+    --white: #ffffff;
+    --gray-bg: #f4f6f4;
+    --red: #b3261e;
+    --amber: #b3720a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--deep-green);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  #app {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    color: var(--white);
+  }
+
+  header {
+    padding: 14px 16px 10px;
+    text-align: center;
+    border-bottom: 2px solid var(--gold);
+    flex-shrink: 0;
+  }
+
+  header .title-small {
+    font-size: 13px;
+    letter-spacing: 3px;
+    color: var(--gold-soft);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  header .title-main {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    gap: 12px;
+    position: relative;
+  }
+
+  #scanner-region {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 3px solid var(--gold);
+  }
+
+  #reader { width: 100%; height: 100%; }
+  #reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
+  #reader__scan_region img { display: none; }
+  #reader__dashboard_section_csr button { display: none !important; }
+
+  /* ---------- Pre-camera / permission / error screens (overlay the scan region) ---------- */
+  #gate-screen {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 22px;
+    z-index: 20;
+  }
+  #gate-screen.hidden { display: none; }
+
+  .gate-title-small { font-size: 12px; letter-spacing: 3px; color: var(--gold-soft); font-weight: 700; }
+  .gate-title-main { font-size: 20px; font-weight: 800; margin: 2px 0 18px; letter-spacing: 1px; }
+  .gate-icon { font-size: 40px; margin-bottom: 10px; }
+  .gate-message { font-size: 14px; line-height: 1.5; max-width: 300px; opacity: 0.9; margin-bottom: 18px; }
+
+  .gate-button {
+    background: var(--gold);
+    color: #1a1a1a;
+    border: none;
+    border-radius: 10px;
+    padding: 13px 26px;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+  }
+  .gate-button:active { opacity: 0.85; }
+  .gate-button.secondary {
+    background: transparent;
+    color: var(--gold-soft);
+    border: 1px solid var(--gold);
+    margin-top: 10px;
+  }
+
+  .hint {
+    text-align: center;
+    font-size: 15px;
+    color: var(--white);
+    opacity: 0.9;
+  }
+
+  #camera-status {
+    text-align: center;
+    font-size: 13px;
+    color: var(--gold-soft);
+    min-height: 18px;
+  }
+
+  .stats-bar {
+    max-width: 480px;
+    margin: 0 auto;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .stat-box { background: rgba(255,255,255,0.08); border-radius: 10px; padding: 8px 4px; text-align: center; }
+  .stat-box .num { font-size: 20px; font-weight: 800; }
+  .stat-box .label { font-size: 10px; letter-spacing: 0.5px; opacity: 0.85; text-transform: uppercase; margin-top: 2px; }
+  .stat-verified .num { color: #7fe3a8; }
+  .stat-used .num { color: var(--gold-soft); }
+  .stat-invalid .num { color: #ff9a8b; }
+  .stat-total .num { color: var(--white); }
+
+  #reset-session {
+    margin: 0 auto;
+    background: transparent;
+    color: var(--gold-soft);
+    border: 1px solid var(--gold);
+    border-radius: 20px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* ---------- Result overlay ---------- */
+  #result-overlay {
+    position: fixed; inset: 0; background: var(--white); color: #1a1a1a;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; z-index: 50;
+  }
+  #result-overlay.show { display: flex; }
+  #result-overlay.verified { background: #e8f8ee; }
+  #result-overlay.already-used { background: #fff4e5; }
+  #result-overlay.invalid, #result-overlay.not-verified { background: #fdeceb; }
+  #result-overlay.error { background: #fff9e0; }
+
+  .result-icon { font-size: 64px; line-height: 1; margin-bottom: 10px; }
+  .result-title { font-size: 24px; font-weight: 800; letter-spacing: 1px; margin-bottom: 14px; }
+  .verified .result-icon, .verified .result-title { color: #1a7a44; }
+  .already-used .result-icon, .already-used .result-title { color: var(--amber); }
+  .invalid .result-icon, .invalid .result-title,
+  .not-verified .result-icon, .not-verified .result-title { color: var(--red); }
+  .error .result-icon, .error .result-title { color: var(--amber); }
+
+  .result-coupon-id { font-size: 18px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px; }
+  .result-name { font-size: 20px; font-weight: 700; }
+  .result-roll { font-size: 15px; opacity: 0.8; margin-top: 2px; }
+  .result-message { margin-top: 14px; font-size: 15px; max-width: 320px; line-height: 1.4; white-space: pre-line; }
+  .result-used-at { margin-top: 10px; font-size: 13px; opacity: 0.75; }
+  .result-returning { margin-top: 22px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.55; }
+
+  .processing-badge {
+    position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6);
+    color: var(--gold-soft); font-size: 11px; padding: 4px 9px; border-radius: 12px;
+    letter-spacing: 0.5px; display: none; z-index: 15;
+  }
+  .processing-badge.show { display: block; }
+
+  footer { text-align: center; font-size: 11px; color: rgba(255,255,255,0.45); padding: 8px 0 12px; }
+
+  /* ---------- Debug panel ---------- */
+  #debug-panel {
+    max-width: 480px; margin: 0 auto; width: 100%;
+    background: rgba(0,0,0,0.35); border: 1px dashed var(--gold);
+    border-radius: 8px; padding: 8px 10px; font-size: 11px; font-family: monospace;
+    display: none; line-height: 1.6;
+  }
+  #debug-panel.show { display: block; }
+  #debug-panel .ok { color: #7fe3a8; }
+  #debug-panel .bad { color: #ff9a8b; }
+  #debug-panel .pending { color: var(--gold-soft); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="title-small">ONAM 2026</div>
+    <div class="title-main">COUPON SCANNER</div>
+  </header>
+
+  <main>
+    <div id="scanner-region">
+      <div id="reader"></div>
+      <div class="processing-badge" id="processing-badge">PROCESSING…</div>
+
+      <div id="gate-screen">
+        <div class="gate-icon" id="gate-icon">📷</div>
+        <div class="gate-title-small">ONAM 2026</div>
+        <div class="gate-title-main">COUPON SCANNER</div>
+        <div class="gate-message" id="gate-message">Camera access is required to scan coupons.</div>
+        <button class="gate-button" id="gate-btn-primary">ENABLE CAMERA</button>
+        <button class="gate-button secondary" id="gate-btn-secondary" style="display:none;">TRY AGAIN</button>
+      </div>
+    </div>
+
+    <div class="hint" id="scan-hint" style="display:none;">Point camera at the QR code on the coupon</div>
+    <div id="camera-status"></div>
+
+    <div class="stats-bar">
+      <div class="stat-box stat-total"><div class="num" id="stat-total">0</div><div class="label">Scanned</div></div>
+      <div class="stat-box stat-verified"><div class="num" id="stat-verified">0</div><div class="label">Verified</div></div>
+      <div class="stat-box stat-used"><div class="num" id="stat-used">0</div><div class="label">Used</div></div>
+      <div class="stat-box stat-invalid"><div class="num" id="stat-invalid">0</div><div class="label">Invalid</div></div>
+    </div>
+
+    <button id="reset-session">Reset Session</button>
+
+    <div id="debug-panel"></div>
+  </main>
+
+  <footer>Frontend: GitHub Pages. Backend/API: Google Apps Script. Database: Google Sheets.</footer>
+</div>
+
+<div id="result-overlay">
+  <div class="result-icon" id="result-icon">✓</div>
+  <div class="result-title" id="result-title">COUPON VERIFIED</div>
+  <div class="result-coupon-id" id="result-coupon-id"></div>
+  <div class="result-name" id="result-name"></div>
+  <div class="result-roll" id="result-roll"></div>
+  <div class="result-message" id="result-message"></div>
+  <div class="result-used-at" id="result-used-at"></div>
+  <div class="result-returning">Returning to scanner…</div>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // =====================================================================
+  // CONFIGURATION — edit these for your deployment
+  // =====================================================================
+  const CONFIG = {
+    // Paste the Apps Script Web App /exec URL here (NOT the editor URL,
+    // NOT a /dev URL). Example:
+    // 'https://script.google.com/macros/s/AKfycb.../exec'
+    API_URL: 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE',
+
+    // Set to true only while troubleshooting on-site; keep false for
+    // normal event operation.
+    DEBUG_MODE: false
+  };
+
+  const REQUEST_TIMEOUT_MS = 12000;
+  const RESULT_DISPLAY_MS = 2200;
+  const DUPLICATE_COOLDOWN_MS = 1500;
+  const QR_BOX_SIZE = 260;
+  const TRANSIENT_RETRY_LIMIT = 2;     // only for "unknown"/transient start errors
+  const TRANSIENT_RETRY_DELAY_MS = 1500;
+
+  // =====================================================================
+  // STATE
+  // =====================================================================
+  let html5QrCode = null;          // single instance for the page's lifetime
+  let cameraRunning = false;
+  let starting = false;            // true while a start() call is in flight
+  let processing = false;          // true while a redeem request is in flight
+  let resultShowing = false;
+  let lastToken = null;
+  let lastTokenTime = 0;
+  let chosenCameraId = null;       // resolved once, reused on restarts
+  let permissionGranted = false;
+  let transientRetryCount = 0;
+
+  const stats = { total: 0, verified: 0, used: 0, invalid: 0, errors: 0 };
+
+  const debugState = {
+    secureContext: 'pending',
+    cameraApi: 'pending',
+    permission: 'pending',
+    camera: 'pending',
+    scanner: 'pending',
+    api: CONFIG.API_URL && CONFIG.API_URL.indexOf('PASTE_YOUR') === -1 ? 'configured' : 'not configured'
+  };
+
+  // =====================================================================
+  // DOM REFS
+  // =====================================================================
+  const el = {
+    gateScreen: document.getElementById('gate-screen'),
+    gateIcon: document.getElementById('gate-icon'),
+    gateMessage: document.getElementById('gate-message'),
+    gateBtnPrimary: document.getElementById('gate-btn-primary'),
+    gateBtnSecondary: document.getElementById('gate-btn-secondary'),
+    scanHint: document.getElementById('scan-hint'),
+    cameraStatus: document.getElementById('camera-status'),
+    processingBadge: document.getElementById('processing-badge'),
+    statTotal: document.getElementById('stat-total'),
+    statVerified: document.getElementById('stat-verified'),
+    statUsed: document.getElementById('stat-used'),
+    statInvalid: document.getElementById('stat-invalid'),
+    resetBtn: document.getElementById('reset-session'),
+    debugPanel: document.getElementById('debug-panel'),
+    overlay: document.getElementById('result-overlay'),
+    resultIcon: document.getElementById('result-icon'),
+    resultTitle: document.getElementById('result-title'),
+    resultCouponId: document.getElementById('result-coupon-id'),
+    resultName: document.getElementById('result-name'),
+    resultRoll: document.getElementById('result-roll'),
+    resultMessage: document.getElementById('result-message'),
+    resultUsedAt: document.getElementById('result-used-at')
+  };
+
+  // =====================================================================
+  // STATS
+  // =====================================================================
+  function renderStats() {
+    el.statTotal.textContent = stats.total;
+    el.statVerified.textContent = stats.verified;
+    el.statUsed.textContent = stats.used;
+    el.statInvalid.textContent = stats.invalid + stats.errors;
+  }
+
+  el.resetBtn.addEventListener('click', function () {
+    stats.total = 0; stats.verified = 0; stats.used = 0; stats.invalid = 0; stats.errors = 0;
+    renderStats();
+  });
+
+  // =====================================================================
+  // DEBUG PANEL
+  // =====================================================================
+  function renderDebug() {
+    if (!CONFIG.DEBUG_MODE) { el.debugPanel.classList.remove('show'); return; }
+    el.debugPanel.classList.add('show');
+    function line(label, value) {
+      const cls = (value === true || value === 'ok' || value === 'Granted' || value === 'Available' ||
+                    value === 'Running' || value === 'configured' || value === 'Connected')
+        ? 'ok'
+        : (value === 'pending') ? 'pending' : 'bad';
+      return '<div>' + label + ': <span class="' + cls + '">' + value + '</span></div>';
+    }
+    el.debugPanel.innerHTML =
+      line('Secure Context', debugState.secureContext) +
+      line('Camera API', debugState.cameraApi) +
+      line('Permission', debugState.permission) +
+      line('Camera', debugState.camera) +
+      line('Scanner', debugState.scanner) +
+      line('API', debugState.api);
+  }
+
+  // =====================================================================
+  // GATE SCREEN (permission / error UI overlaying the scan region)
+  // =====================================================================
+  function showGate(opts) {
+    el.gateScreen.classList.remove('hidden');
+    el.gateIcon.textContent = opts.icon || '📷';
+    el.gateMessage.textContent = opts.message || '';
+    el.gateBtnPrimary.textContent = opts.primaryLabel || 'ENABLE CAMERA';
+    el.gateBtnPrimary.style.display = opts.showPrimary === false ? 'none' : 'inline-block';
+    el.gateBtnSecondary.style.display = opts.showSecondary ? 'inline-block' : 'none';
+    el.scanHint.style.display = 'none';
+  }
+
+  function hideGate() {
+    el.gateScreen.classList.add('hidden');
+    el.scanHint.style.display = 'block';
+  }
+
+  el.gateBtnPrimary.addEventListener('click', function () {
+    // Explicit user-gesture-initiated start — required for reliable
+    // permission prompts on iOS Safari and several Android browsers.
+    el.cameraStatus.textContent = 'Requesting camera access…';
+    requestPermissionAndStart();
+  });
+
+  el.gateBtnSecondary.addEventListener('click', function () {
+    transientRetryCount = 0;
+    el.cameraStatus.textContent = 'Retrying…';
+    cleanupCameraThenStart();
+  });
+
+  // =====================================================================
+  // BOOT SEQUENCE
+  // Page loaded -> DOM ready -> secure-context check -> capability check
+  // -> show permission gate (wait for user gesture) -> on tap: request
+  // permission -> enumerate cameras -> prefer rear camera -> start scanner
+  // =====================================================================
+  function boot() {
+    renderStats();
+    renderDebug();
+
+    // 1. Secure context check.
+    if (!window.isSecureContext) {
+      debugState.secureContext = 'FAILED';
+      renderDebug();
+      showGate({
+        icon: '🔒',
+        message: 'SECURE CONNECTION REQUIRED\n\nPlease open the official HTTPS scanner link.',
+        showPrimary: false
+      });
+      return;
+    }
+    debugState.secureContext = 'ok';
+
+    // 2. Camera API availability check.
+    const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    if (!hasMediaDevices || typeof Html5Qrcode === 'undefined') {
+      debugState.cameraApi = typeof Html5Qrcode === 'undefined' ? 'library missing' : 'unavailable';
+      renderDebug();
+      showGate({
+        icon: '⚠',
+        message: typeof Html5Qrcode === 'undefined'
+          ? 'SCANNER LIBRARY FAILED TO LOAD\n\nPlease check your internet connection and reload the page.'
+          : 'BROWSER NOT SUPPORTED\n\nThis browser does not support camera access. Please use a recent version of Chrome or Safari.',
+        showPrimary: false
+      });
+      return;
+    }
+    debugState.cameraApi = 'Available';
+    renderDebug();
+
+    // 3. Show the permission gate and wait for an explicit tap.
+    showGate({
+      icon: '📷',
+      message: 'Camera access is required to scan coupons.',
+      primaryLabel: 'ENABLE CAMERA'
+    });
+
+    if (!CONFIG.API_URL || CONFIG.API_URL.indexOf('PASTE_YOUR') !== -1) {
+      el.cameraStatus.textContent = 'Warning: API_URL is not configured yet.';
+    }
+  }
+
+  // =====================================================================
+  // PERMISSION + CAMERA SELECTION + START
+  // =====================================================================
+  function requestPermissionAndStart() {
+    if (starting) return;
+    starting = true;
+
+    ensureInstance();
+
+    // Html5Qrcode.getCameras() itself triggers the permission prompt on
+    // browsers that support enumeration-with-labels-after-consent. This
+    // covers the "request permission" + "enumerate cameras" steps together.
+    Html5Qrcode.getCameras().then(function (devices) {
+      permissionGranted = true;
+      debugState.permission = 'Granted';
+
+      if (devices && devices.length) {
+        chosenCameraId = pickRearCamera(devices);
+        debugState.camera = chosenCameraId ? 'Rear Camera' : 'First Available';
+        startWithDeviceId(chosenCameraId || devices[0].id);
+      } else {
+        // No devices returned even though permission succeeded — fall
+        // back to constraint-based facingMode selection.
+        debugState.camera = 'facingMode fallback';
+        startWithFacingMode();
+      }
+    }).catch(function (err) {
+      // getCameras() failing is usually a permission denial, but some
+      // browsers throw here for other reasons too — inspect it.
+      handleCameraStartError(err, /*fromEnumeration=*/true);
+    });
+  }
+
+  function pickRearCamera(devices) {
+    // Devices may not expose descriptive labels until permission is
+    // granted; by this point (after getCameras resolved) they usually do.
+    const rearKeywords = ['back', 'rear', 'environment'];
+    const frontKeywords = ['front', 'user', 'face'];
+
+    let candidate = devices.find(function (d) {
+      const label = (d.label || '').toLowerCase();
+      return rearKeywords.some(function (k) { return label.indexOf(k) !== -1; }) &&
+             !frontKeywords.some(function (k) { return label.indexOf(k) !== -1; });
+    });
+    if (candidate) return candidate.id;
+
+    // No labeled rear camera found. If there are multiple cameras, the
+    // last one is very often the rear camera on phones (front camera is
+    // typically enumerated first). This is a heuristic fallback only.
+    if (devices.length > 1) return devices[devices.length - 1].id;
+
+    return devices[0].id;
+  }
+
+  function ensureInstance() {
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode('reader', { verbose: false });
+    }
+  }
+
+  function scanConfig() {
+    return { fps: 10, qrbox: { width: QR_BOX_SIZE, height: QR_BOX_SIZE }, aspectRatio: 1.0 };
+  }
+
+  function startWithDeviceId(deviceId) {
+    html5QrCode.start(
+      { deviceId: { exact: deviceId } },
+      scanConfig(),
+      onScanSuccess,
+      onScanFailure
+    ).then(onStartSuccess).catch(function (err) {
+      // A specific deviceId can fail (e.g. taken by another tab) even
+      // though enumeration succeeded — fall back to facingMode.
+      startWithFacingMode();
+    });
+  }
+
+  function startWithFacingMode() {
+    html5QrCode.start(
+      { facingMode: { exact: 'environment' } },
+      scanConfig(),
+      onScanSuccess,
+      onScanFailure
+    ).then(onStartSuccess).catch(function (err) {
+      // Some devices reject "exact"; retry with a loose preference.
+      html5QrCode.start(
+        { facingMode: 'environment' },
+        scanConfig(),
+        onScanSuccess,
+        onScanFailure
+      ).then(onStartSuccess).catch(function (err2) {
+        handleCameraStartError(err2, false);
+      });
+    });
+  }
+
+  function onStartSuccess() {
+    cameraRunning = true;
+    starting = false;
+    transientRetryCount = 0;
+    debugState.scanner = 'Running';
+    debugState.permission = 'Granted';
+    if (!debugState.camera || debugState.camera === 'pending') debugState.camera = 'Active';
+    renderDebug();
+    hideGate();
+    el.cameraStatus.textContent = '';
+  }
+
+  function handleCameraStartError(err, fromEnumeration) {
+    starting = false;
+    cameraRunning = false;
+    debugState.scanner = 'FAILED';
+
+    const name = (err && err.name) ? err.name : '';
+    const message = (err && err.message) ? String(err.message) : String(err || '');
+    const combined = (name + ' ' + message).toLowerCase();
+
+    let category = 'unknown';
+    if (combined.indexOf('notallowed') !== -1 || combined.indexOf('permission') !== -1 || combined.indexOf('denied') !== -1) {
+      category = 'permission_denied';
+    } else if (combined.indexOf('notfound') !== -1 || combined.indexOf('no camera') !== -1 || combined.indexOf('overconstrained') !== -1) {
+      category = 'no_camera';
+    } else if (combined.indexOf('notreadable') !== -1 || combined.indexOf('trackstart') !== -1 || combined.indexOf('in use') !== -1 || combined.indexOf('busy') !== -1) {
+      category = 'camera_busy';
+    } else if (combined.indexOf('not supported') !== -1 || combined.indexOf('undefined') !== -1) {
+      category = 'unsupported';
+    }
+
+    debugState.permission = category === 'permission_denied' ? 'Denied' : debugState.permission;
+    renderDebug();
+
+    switch (category) {
+      case 'permission_denied':
+        showGate({
+          icon: '🚫',
+          message: 'CAMERA ACCESS DENIED\n\nPlease allow camera access in your browser settings, then tap "Try Again".',
+          showPrimary: false,
+          showSecondary: true
+        });
+        break;
+      case 'no_camera':
+        showGate({
+          icon: '📵',
+          message: 'NO CAMERA FOUND\n\nNo usable camera was detected on this device.',
+          showPrimary: false,
+          showSecondary: true
+        });
+        break;
+      case 'camera_busy':
+        showGate({
+          icon: '⏳',
+          message: 'CAMERA BUSY\n\nAnother application or browser tab may be using the camera. Close it and tap "Try Again".',
+          showPrimary: false,
+          showSecondary: true
+        });
+        break;
+      case 'unsupported':
+        showGate({
+          icon: '⚠',
+          message: 'BROWSER DOES NOT SUPPORT CAMERA ACCESS\n\nPlease use a recent version of Chrome or Safari.',
+          showPrimary: false,
+          showSecondary: true
+        });
+        break;
+      default:
+        // Unknown/transient error — allow a small number of automatic
+        // retries before handing control back to the operator. This is
+        // NOT the old "retry forever every 1.5s" behavior.
+        if (transientRetryCount < TRANSIENT_RETRY_LIMIT) {
+          transientRetryCount++;
+          el.cameraStatus.textContent = 'Camera did not start — retrying (' + transientRetryCount + '/' + TRANSIENT_RETRY_LIMIT + ')…';
+          setTimeout(function () {
+            if (chosenCameraId) startWithDeviceId(chosenCameraId);
+            else startWithFacingMode();
+          }, TRANSIENT_RETRY_DELAY_MS);
+        } else {
+          showGate({
+            icon: '⚠',
+            message: 'CAMERA ERROR\n\nSomething went wrong starting the camera. Tap "Try Again".',
+            showPrimary: false,
+            showSecondary: true
+          });
+        }
+    }
+  }
+
+  // =====================================================================
+  // CLEANUP / RESTART (single instance, no duplicate streams)
+  // =====================================================================
+  function cleanupCameraThenStart() {
+    if (!html5QrCode) {
+      requestPermissionAndStart();
+      return;
+    }
+    if (cameraRunning) {
+      html5QrCode.stop().then(function () {
+        cameraRunning = false;
+        setTimeout(requestPermissionAndStart, 150); // brief pause before restart
+      }).catch(function () {
+        cameraRunning = false;
+        setTimeout(requestPermissionAndStart, 150);
+      });
+    } else {
+      requestPermissionAndStart();
+    }
+  }
+
+  // Scan failures fire continuously while no QR is in frame — normal, no-op.
+  function onScanFailure() { /* no-op by design */ }
+
+  // =====================================================================
+  // SCAN HANDLING
+  // =====================================================================
+  function onScanSuccess(decodedText) {
+    if (processing || resultShowing) return; // ignore new scans while busy
+
+    const token = (decodedText || '').trim();
+    if (!token) return;
+
+    const now = Date.now();
+    if (token === lastToken && (now - lastTokenTime) < DUPLICATE_COOLDOWN_MS) return;
+    lastToken = token;
+    lastTokenTime = now;
+
+    submitScan(token);
+  }
+
+  function submitScan(qrToken) {
+    processing = true;
+    el.processingBadge.classList.add('show');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+
+    fetch(CONFIG.API_URL, {
+      method: 'POST',
+      // text/plain avoids a CORS preflight (OPTIONS), which Apps Script
+      // Web Apps do not handle. The server still parses this as JSON.
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'redeem', qrToken: qrToken }),
+      signal: controller.signal
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      })
+      .then(function (data) {
+        stats.total++;
+        debugState.api = 'Connected';
+        handleResult(data);
+      })
+      .catch(function (err) {
+        stats.total++;
+        stats.errors++;
+        renderStats();
+        if (err && err.name === 'AbortError') {
+          showResult({ variant: 'error', icon: '⚠', title: 'CONNECTION TIMEOUT', message: 'Please scan again.' });
+        } else {
+          debugState.api = 'FAILED';
+          showResult({
+            variant: 'error', icon: '⚠', title: 'CONNECTION ERROR',
+            message: 'Could not contact the server.\nThe coupon was NOT confirmed.\nPlease scan again.'
+          });
+        }
+        renderDebug();
+      })
+      .finally(function () {
+        clearTimeout(timeoutId);
+        processing = false; // always reset, even on exception
+        el.processingBadge.classList.remove('show');
+      });
+  }
+
+  function handleResult(data) {
+    if (!data || typeof data !== 'object') {
+      stats.errors++; renderStats();
+      showResult({ variant: 'error', icon: '⚠', title: 'SERVER ERROR', message: 'Unexpected response. Please try again.' });
+      return;
+    }
+
+    switch (data.status) {
+      case 'verified':
+        stats.verified++; renderStats();
+        showResult({
+          variant: 'verified', icon: '✓', title: 'COUPON VERIFIED',
+          couponId: data.coupon && data.coupon.couponId,
+          name: data.coupon && data.coupon.name,
+          roll: data.coupon && data.coupon.rollNumber,
+          message: 'Coupon successfully marked as USED.'
+        });
+        break;
+      case 'already_used':
+        stats.used++; renderStats();
+        showResult({
+          variant: 'already-used', icon: '✕', title: 'ALREADY USED',
+          couponId: data.coupon && data.coupon.couponId,
+          name: data.coupon && data.coupon.name,
+          roll: data.coupon && data.coupon.rollNumber,
+          usedAt: data.coupon && data.coupon.usedAt
+        });
+        break;
+      case 'invalid':
+        stats.invalid++; renderStats();
+        showResult({ variant: 'invalid', icon: '✕', title: 'INVALID COUPON', message: 'This QR code is not associated with a valid Onam coupon.' });
+        break;
+      case 'not_verified':
+        stats.invalid++; renderStats();
+        showResult({ variant: 'not-verified', icon: '✕', title: 'NOT VERIFIED', message: 'This coupon has not been verified for use.' });
+        break;
+      default:
+        stats.errors++; renderStats();
+        showResult({ variant: 'error', icon: '⚠', title: 'SERVER ERROR', message: (data.message || 'Temporary server error. Please try again.') });
+    }
+  }
+
+  // =====================================================================
+  // RESULT OVERLAY
+  // =====================================================================
+  function showResult(opts) {
+    resultShowing = true;
+    el.overlay.className = '';
+    el.overlay.classList.add('show', opts.variant);
+
+    el.resultIcon.textContent = opts.icon || '';
+    el.resultTitle.textContent = opts.title || '';
+    el.resultCouponId.textContent = opts.couponId || '';
+    el.resultCouponId.style.display = opts.couponId ? 'block' : 'none';
+    el.resultName.textContent = opts.name || '';
+    el.resultName.style.display = opts.name ? 'block' : 'none';
+    el.resultRoll.textContent = opts.roll ? String(opts.roll).toUpperCase() : '';
+    el.resultRoll.style.display = opts.roll ? 'block' : 'none';
+    el.resultMessage.textContent = opts.message || '';
+    el.resultMessage.style.display = opts.message ? 'block' : 'none';
+    el.resultUsedAt.textContent = opts.usedAt ? ('Used at: ' + formatDisplayTime(opts.usedAt)) : '';
+    el.resultUsedAt.style.display = opts.usedAt ? 'block' : 'none';
+
+    setTimeout(function () {
+      el.overlay.classList.remove('show');
+      resultShowing = false;
+      // Camera stream is never stopped during result display, so
+      // scanning resumes automatically without recreating anything.
+    }, RESULT_DISPLAY_MS);
+  }
+
+  function formatDisplayTime(isoOrString) {
+    const d = new Date(isoOrString);
+    if (isNaN(d.getTime())) return String(isoOrString);
+    return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // =====================================================================
+  // RECOVERY: screen lock / tab switch / backgrounding
+  // Never resubmits the last token; never creates a second instance.
+  // =====================================================================
+  function recoverCameraIfNeeded() {
+    if (!permissionGranted) return; // don't auto-prompt before user gesture
+    if (!html5QrCode) return;
+    if (cameraRunning || starting) return;
+    if (chosenCameraId) startWithDeviceId(chosenCameraId);
+    else startWithFacingMode();
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') recoverCameraIfNeeded();
+  });
+  window.addEventListener('pageshow', function () { recoverCameraIfNeeded(); });
+
+  // Periodic self-check: if the camera silently died, restart it — reuses
+  // the single html5QrCode instance, never creates a new one.
+  setInterval(function () {
+    if (permissionGranted && html5QrCode && !cameraRunning && !starting && !processing) {
+      recoverCameraIfNeeded();
+    }
+  }, 5000);
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  boot();
+
+})();
+</script>
+
+</body>
+</html>
